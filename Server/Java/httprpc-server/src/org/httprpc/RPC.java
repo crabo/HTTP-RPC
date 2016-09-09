@@ -36,4 +36,21 @@ public @interface RPC {
      * The path associated with the method.
      */
     public String path() default "";
+    
+    //added by crabo
+    public String[] args() default {};
+    
+    public Check check() default Check.NULL;
+    
+    public enum Check {
+    	NULL(0),SIGN(1),IP(2),SIGN_IP(3);  
+        //构造枚举值，比如RED(255,0,0)  
+        private Check(int v){  
+         this.value=v; 
+        }
+        int value;
+        public int getValue(){
+        	return value;
+        }
+    }
 }

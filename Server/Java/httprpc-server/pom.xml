@@ -5,5 +5,57 @@
     <groupId>org.httprpc</groupId>
     <artifactId>httprpc-server</artifactId>
     <name>HTTP-RPC Server</name>
-    <version>3.2.3</version>
+    <version>3.2.3-SNAPSHOT</version>
+  	<packaging>jar</packaging>
+  	
+  	<properties>
+		 <java.version>1.7</java.version>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+	  </properties>
+ 
+	<dependencies>
+		 <dependency>
+				<groupId>javax.servlet</groupId>
+				<artifactId>javax.servlet-api</artifactId>
+				<version>3.1.0</version>
+			</dependency>
+	</dependencies>
+	
+		
+<build>
+  <plugins>
+  		<plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-compiler-plugin</artifactId>
+              <version>3.5.1</version>
+              <configuration>
+                  <source>${java.version}</source>
+                  <target>${java.version}</target>
+                  <encoding>UTF-8</encoding>
+                  <optimize>true</optimize>
+                  <showDeprecation>true</showDeprecation>
+                  <showWarnings>true</showWarnings>
+                  <compilerArgument>-Xlint:all,-serial,-path,-rawtypes,-unchecked</compilerArgument>
+              </configuration>
+          </plugin>
+          
+          <plugin>
+		    <artifactId>maven-source-plugin</artifactId>
+		    <version>3.0.0</version>
+		    <executions>
+		        <execution>
+		            <phase>package</phase>
+		            <goals><goal>jar-no-fork</goal></goals>
+		        </execution>
+		    </executions>
+		</plugin>
+  </plugins> 
+  </build>
+  <distributionManagement>  
+   <repository>  
+     <id>nascent-plugins</id>  
+     <name>nascent-plugins</name>  
+     <url>http://192.168.1.88:9081/repository/NascentPackages</url>  
+   </repository>  
+ </distributionManagement> 
 </project>

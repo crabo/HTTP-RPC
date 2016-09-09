@@ -51,6 +51,7 @@ public class RequestDispatcherServlet extends HttpServlet {
 
     // Resource structure
     private static class Resource {
+    	public final HashMap<Method, String[]> methodParamNameMap = new HashMap<>();//by crabo
         public final HashMap<String, LinkedList<Method>> handlerMap = new HashMap<>();
         public final HashMap<String, Resource> resources = new HashMap<>();
     }
@@ -81,6 +82,24 @@ public class RequestDispatcherServlet extends HttpServlet {
 
     private Class<?> serviceType = null;
     private Resource root = null;
+    private String serviceClassName;//by crabo
+	public void setServiceClassName(String className){
+		serviceClassName=className;
+	}
+	private String packageName;//by crabo
+	public void setPackageName(String packageName){
+		this.packageName=packageName;
+	}
+	public String getRoutePath(String path,String methodName){
+		if(path.length() == 0){
+			return packageName+"/"+methodName;
+		}
+		
+		if(path.indexOf("/")<0)
+			path="/"+path;
+		
+		return packageName+path;
+	}
 
     private static final String UTF_8_ENCODING = "UTF-8";
 
@@ -91,7 +110,8 @@ public class RequestDispatcherServlet extends HttpServlet {
     @Override
     public void init() throws ServletException {
         // Load service class
-        String serviceClassName = getServletConfig().getInitParameter("serviceClassName");
+    	if(serviceClassName==null)//by crabo
+        	serviceClassName = getServletConfig().getInitParameter("serviceClassName");
 
         try {
             serviceType = Class.forName(serviceClassName);
@@ -147,6 +167,24 @@ public class RequestDispatcherServlet extends HttpServlet {
                 }
 
                 handlerList.add(method);
+                
+               //added by crabo
+                if(rpc.args().length>0){
+                	if(rpc.args().length!=method.getParameterTypes().length)
+                		throw new IllegalArgumentException("Wrong 'args' name list in @RPC: "+serviceClassName+"."+method.getName());
+                	
+                	resource.methodParamNameMap.put(method,rpc.args());
+                }else if(method.getParameterTypes().length>0)
+                {
+                	//不设置，通过编译器-Paramertes 保留方法的参数名！！ 否则是 arg0,arg1....的参数名
+                	Parameter[] ps = method.getParameters();
+                	String[] names = new String[ps.length];
+                	
+                	for(int k=0;k<ps.length;k++)
+                		names[k]=ps[k].getName();
+                	
+                	resource.methodParamNameMap.put(method,names);
+                }
             }
         }
     }
@@ -217,7 +255,7 @@ public class RequestDispatcherServlet extends HttpServlet {
         }
 
         // Populate parameter map
-        HashMap<String, LinkedList<String>> parameterMap = new HashMap<>();
+        HashMap<String, String[]> parameterMap = new HashMap<>();
 
         Enumeration<String> parameterNames = request.getParameterNames();
 
@@ -225,13 +263,13 @@ public class RequestDispatcherServlet extends HttpServlet {
             String name = parameterNames.nextElement();
             String[] values = request.getParameterValues(name);
 
-            LinkedList<String> valueList = new LinkedList<>();
+            /*LinkedList<String> valueList = new LinkedList<>();
 
             for (int i = 0; i < values.length; i++) {
                 valueList.add(values[i]);
-            }
+            }*/
 
-            parameterMap.put(name, valueList);
+            parameterMap.put(name, values);
         }
 
         // Populate file map
@@ -264,7 +302,7 @@ public class RequestDispatcherServlet extends HttpServlet {
         }
 
         // Invoke handler method
-        Method method = getMethod(handlerList, parameterMap, fileMap);
+        Method method = getMethod(resource,handlerList, parameterMap, fileMap);
 
         if (method == null) {
             response.setStatus(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
@@ -343,8 +381,9 @@ public class RequestDispatcherServlet extends HttpServlet {
                 } else {
                     service = null;
                 }
-
-                result = method.invoke(service, getArguments(method, parameterMap, fileMap));
+                if(beforeInvoke(method,service,request,response)==false)//by crabo
+                	return;
+                result = method.invoke(service, getArguments(resource,request,method, parameterMap, fileMap));
             } catch (Exception exception) {
                 response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
 
@@ -378,8 +417,12 @@ public class RequestDispatcherServlet extends HttpServlet {
             }
         }
     }
+    protected boolean beforeInvoke(Method method,WebService target,HttpServletRequest request, HttpServletResponse response)
+    		throws IOException{
+    	return true;
+    }
 
-    private static Method getMethod(LinkedList<Method> handlerList, HashMap<String, LinkedList<String>> parameterMap,
+    private static Method getMethod(Resource resource,LinkedList<Method> handlerList, HashMap<String, String[]> parameterMap,
         HashMap<String, LinkedList<File>> fileMap) {
         Method method = null;
 
@@ -388,20 +431,22 @@ public class RequestDispatcherServlet extends HttpServlet {
         int i = Integer.MAX_VALUE;
 
         for (Method handler : handlerList) {
-            Parameter[] parameters = handler.getParameters();
+        	//by crabo
+        	String[] parameterNames = resource.methodParamNameMap.get(handler);
+            //Parameter[] parameters = handler.getParameters();
 
-            if (parameters.length >= n) {
+            if (parameterNames.length >= n) {
                 int j = 0;
 
-                for (int k = 0; k < parameters.length; k++) {
-                    String name = parameters[k].getName();
+                for (int k = 0; k < parameterNames.length; k++) {
+                    String name = parameterNames[k];//.getName();
 
                     if (!(parameterMap.containsKey(name) || fileMap.containsKey(name))) {
                         j++;
                     }
                 }
 
-                if (parameters.length - j == n && j < i) {
+                if (parameterNames.length - j == n && j < i) {
                     method = handler;
 
                     i = j;
@@ -412,22 +457,26 @@ public class RequestDispatcherServlet extends HttpServlet {
         return method;
     }
 
-    private static Object[] getArguments(Method method, HashMap<String, LinkedList<String>> parameterMap,
+    private static Object[] getArguments(Resource resource,HttpServletRequest request,Method method, HashMap<String, String[]> parameterMap,
         HashMap<String, LinkedList<File>> fileMap) throws IOException {
-        Parameter[] parameters = method.getParameters();
-
+    	//by crabo
+    	//Parameter[] parameters = method.getParameters();
+        Class<?>[] parameters = method.getParameterTypes();
+    	String[] parameterNames = resource.methodParamNameMap.get(method);
+    	
         Object[] arguments = new Object[parameters.length];
 
         for (int i = 0; i < parameters.length; i++) {
-            Parameter parameter = parameters[i];
+            //Parameter parameter = parameters[i];
 
-            String name = parameter.getName();
-            Class<?> type = parameter.getType();
+            String name = parameterNames[i];//parameter.getName();
+            Class<?> type = parameters[i];
 
             Object argument;
             if (type == List.class) {
-                ParameterizedType parameterizedType = (ParameterizedType)parameter.getParameterizedType();
-                Type elementType = parameterizedType.getActualTypeArguments()[0];
+                //ParameterizedType parameterizedType = (ParameterizedType)parameter.getParameterizedType();
+            	ParameterizedType parameterizedType=(ParameterizedType)type.getGenericSuperclass();
+            	Type elementType = parameterizedType.getActualTypeArguments()[0];
 
                 List<Object> list;
                 if (elementType == URL.class) {
@@ -443,10 +492,10 @@ public class RequestDispatcherServlet extends HttpServlet {
                         list = Collections.emptyList();
                     }
                 } else {
-                    LinkedList<String> valueList = parameterMap.get(name);
+                	String[] valueList = parameterMap.get(name);
 
                     if (valueList != null) {
-                        int n = valueList.size();
+                        int n = valueList.length;//.size();
 
                         list = new ArrayList<>(n);
 
@@ -467,7 +516,12 @@ public class RequestDispatcherServlet extends HttpServlet {
                 } else {
                     argument = null;
                 }
-            } else {
+            } else if (type==HttpServletRequest.class){
+            	argument=request;
+            }else {
+            	String[] values = parameterMap.get(name);
+            	String value=values==null?null:values[0];
+            	/*
                 LinkedList<String> valueList = parameterMap.get(name);
 
                 String value;
@@ -475,7 +529,7 @@ public class RequestDispatcherServlet extends HttpServlet {
                     value = valueList.getFirst();
                 } else {
                     value = null;
-                }
+                }*/
 
                 argument = getArgument(value, type);
             }
