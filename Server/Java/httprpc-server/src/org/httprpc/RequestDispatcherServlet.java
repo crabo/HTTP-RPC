@@ -239,6 +239,7 @@ public class RequestDispatcherServlet extends HttpServlet {
 
         if (resource == null) {
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            response.getWriter().append("ROUTE NOT FOUND");
             return;
         }
 
@@ -246,6 +247,7 @@ public class RequestDispatcherServlet extends HttpServlet {
 
         if (handlerList == null) {
             response.setStatus(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+            response.getWriter().append("ROUTE METHOD NOT VALID");
             return;
         }
 
@@ -306,6 +308,7 @@ public class RequestDispatcherServlet extends HttpServlet {
 
         if (method == null) {
             response.setStatus(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+            response.getWriter().append("API METHOD NOT FOUND");
             return;
         }
 
@@ -342,6 +345,7 @@ public class RequestDispatcherServlet extends HttpServlet {
 
                 if (encoder == null) {
                     response.setStatus(HttpServletResponse.SC_NOT_ACCEPTABLE);
+                    response.getWriter().append("API NOT ACCEPTABLE");
                     return;
                 }
             } else {
@@ -354,7 +358,7 @@ public class RequestDispatcherServlet extends HttpServlet {
                         response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
 
                         request.getServletContext().log(getClass().getName(), exception);
-
+                        response.getWriter().append("API ENCODER ERROR");
                         return;
                     }
                 } else {
@@ -385,6 +389,7 @@ public class RequestDispatcherServlet extends HttpServlet {
                 	return;
                 result = method.invoke(service, getArguments(resource,request,method, parameterMap, fileMap));
             } catch (Exception exception) {
+            	exception.printStackTrace();
                 response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
 
                 Throwable cause = exception.getCause();
@@ -405,10 +410,16 @@ public class RequestDispatcherServlet extends HttpServlet {
                 try {
                     encoder.writeValue(result, response.getOutputStream());
                 } catch (IOException exception) {
+                	exception.printStackTrace();
                     request.getServletContext().log(getClass().getName(), exception);
                 }
             }
-        } finally {
+        }catch (Exception exception) {
+        	exception.printStackTrace();
+        	response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        	exception.printStackTrace(response.getWriter());
+        }
+        finally {
             // Delete files
             for (LinkedList<File> fileList : fileMap.values()) {
                 for (File file : fileList) {
