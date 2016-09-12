@@ -135,8 +135,9 @@ public class RequestDispatcherServlet extends HttpServlet {
 
             if (rpc != null) {
                 Resource resource = root;
-
-                String[] components = rpc.path().split("/");
+                
+                //by crabo: //rpc.path().split("/");
+                String[] components = getRoutePath(rpc.path(),method.getName()).split("/");
 
                 for (int j = 0; j < components.length; j++) {
                     String component = components[j];
