@@ -442,6 +442,9 @@ public class RequestDispatcherServlet extends HttpServlet {
 
         int i = Integer.MAX_VALUE;
 
+        if(handlerList.size()==1)//added by crabo
+        	return handlerList.getFirst();
+        
         for (Method handler : handlerList) {
         	//by crabo
         	String[] parameterNames = resource.methodParamNameMap.get(handler);

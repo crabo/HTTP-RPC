@@ -40,6 +40,18 @@ public class JSONEncoder implements Encoder {
     @Override
     public void writeValue(Object value, OutputStream outputStream) throws IOException {
         Writer writer = new OutputStreamWriter(outputStream, Charset.forName(UTF_8_ENCODING));
+        
+        //by crabo
+        if (value!=null && value instanceof CharSequence){
+        	CharSequence string = (CharSequence)value;
+        	if(string.charAt(0)== '[' || string.charAt(0)=='{')//JSON format direct output
+        	{
+        		writer.append(string);
+        		writer.flush();
+        		return;
+        	}
+        }
+        
         writeValue(value, writer);
 
         writer.flush();
