@@ -16,6 +16,7 @@ package org.httprpc;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
@@ -370,7 +371,7 @@ public class RequestDispatcherServlet extends HttpServlet {
 
         try {
             Object result;
-            try {
+            //try {
                 WebService service;
                 if (!Modifier.isStatic(method.getModifiers())) {
                     service = (WebService)serviceType.newInstance();
@@ -389,7 +390,7 @@ public class RequestDispatcherServlet extends HttpServlet {
                 if(beforeInvoke(method,service,request,response)==false)//by crabo
                 	return;
                 result = method.invoke(service, getArguments(resource,request,method, parameterMap, fileMap));
-            } catch (Exception exception) {
+            /*} catch (Exception exception) {
             	exception.printStackTrace();
                 response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
 
@@ -400,7 +401,7 @@ public class RequestDispatcherServlet extends HttpServlet {
                 }
 
                 return;
-            }
+            }*/
 
             // Write response
             if (returnType == Void.TYPE || returnType == Void.class) {
@@ -415,11 +416,9 @@ public class RequestDispatcherServlet extends HttpServlet {
                     request.getServletContext().log(getClass().getName(), exception);
                 }
             }
-        }catch (Exception exception) {
-        	exception.printStackTrace();
-        	response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-        	exception.printStackTrace(response.getWriter());
-        }
+        }catch (InstantiationException | IllegalAccessException |IllegalArgumentException|InvocationTargetException e) {
+			throw new ServletException(e.getMessage(),e.getCause());
+		}
         finally {
             // Delete files
             for (LinkedList<File> fileList : fileMap.values()) {
