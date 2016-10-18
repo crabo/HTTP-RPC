@@ -19,6 +19,11 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.Charset;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -40,18 +45,6 @@ public class JSONEncoder implements Encoder {
     @Override
     public void writeValue(Object value, OutputStream outputStream) throws IOException {
         Writer writer = new OutputStreamWriter(outputStream, Charset.forName(UTF_8_ENCODING));
-        
-        //by crabo
-        if (value!=null && value instanceof CharSequence){
-        	CharSequence string = (CharSequence)value;
-        	if(string.charAt(0)== '[' || string.charAt(0)=='{')//JSON format direct output
-        	{
-        		writer.append(string);
-        		writer.flush();
-        		return;
-        	}
-        }
-        
         writeValue(value, writer);
 
         writer.flush();
@@ -100,6 +93,14 @@ public class JSONEncoder implements Encoder {
             writer.append("\"");
         } else if (value instanceof Number || value instanceof Boolean) {
             writer.append(String.valueOf(value));
+        } else if (value instanceof Date) {
+            writeValue(((Date)value).getTime(), writer);
+        } else if (value instanceof LocalDate) {
+            writeValue(((LocalDate)value).format(DateTimeFormatter.ISO_LOCAL_DATE), writer);
+        } else if (value instanceof LocalTime) {
+            writeValue(((LocalTime)value).format(DateTimeFormatter.ISO_LOCAL_TIME), writer);
+        } else if (value instanceof LocalDateTime) {
+            writeValue(((LocalDateTime)value).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME), writer);
         } else if (value instanceof List<?>) {
             List<?> list = (List<?>)value;
 
@@ -159,13 +160,15 @@ public class JSONEncoder implements Encoder {
 
                     Object key = entry.getKey();
 
-                    if (!(key instanceof String)) {
-                        throw new IOException("Invalid key type.");
+                    if (key == null) {
+                        continue;
                     }
 
                     indent(writer);
 
-                    writer.append("\"" + key + "\": ");
+                    writeValue(key.toString(), writer);
+
+                    writer.append(": ");
 
                     writeValue(entry.getValue(), writer);
 
@@ -189,7 +192,7 @@ public class JSONEncoder implements Encoder {
                 }
             }
         } else {
-            throw new IOException("Invalid value type.");
+            writeValue(value.toString(), writer);
         }
     }
 

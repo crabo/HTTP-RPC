@@ -16,6 +16,7 @@ package org.httprpc.beans;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.time.temporal.TemporalAccessor;
 import java.util.AbstractList;
 import java.util.AbstractMap;
 import java.util.AbstractSet;
@@ -34,25 +35,45 @@ public class BeanAdapter extends AbstractMap<String, Object> {
     // List adapter
     private static class ListAdapter extends AbstractList<Object> {
         private List<Object> list;
+        private HashMap<Class<?>, HashMap<String, Method>> getterCache;
 
-        public ListAdapter(List<Object> list) {
+        public ListAdapter(List<Object> list, HashMap<Class<?>, HashMap<String, Method>> getterCache) {
             this.list = list;
+            this.getterCache = getterCache;
         }
 
         @Override
         public Object get(int index) {
-            return adapt(list.get(index));
+            return adapt(list.get(index), getterCache);
         }
 
         @Override
         public int size() {
             return list.size();
         }
+
+        @Override
+        public Iterator<Object> iterator() {
+            return new Iterator<Object>() {
+                private Iterator<Object> iterator = list.iterator();
+
+                @Override
+                public boolean hasNext() {
+                    return iterator.hasNext();
+                }
+
+                @Override
+                public Object next() {
+                    return adapt(iterator.next(), getterCache);
+                }
+            };
+        }
     }
 
     // Map adapter
     private static class MapAdapter extends AbstractMap<Object, Object> {
         private Map<Object, Object> map;
+        private HashMap<Class<?>, HashMap<String, Method>> getterCache;
 
         private Set<Entry<Object, Object>> entrySet = new AbstractSet<Entry<Object, Object>>() {
             @Override
@@ -82,7 +103,7 @@ public class BeanAdapter extends AbstractMap<String, Object> {
 
                             @Override
                             public Object getValue() {
-                                return adapt(entry.getValue());
+                                return adapt(entry.getValue(), getterCache);
                             }
 
                             @Override
@@ -95,8 +116,14 @@ public class BeanAdapter extends AbstractMap<String, Object> {
             }
         };
 
-        public MapAdapter(Map<Object, Object> map) {
+        public MapAdapter(Map<Object, Object> map, HashMap<Class<?>, HashMap<String, Method>> getterCache) {
             this.map = map;
+            this.getterCache = getterCache;
+        }
+
+        @Override
+        public Object get(Object key) {
+            return adapt(map.get(key), getterCache);
         }
 
         @Override
@@ -106,8 +133,9 @@ public class BeanAdapter extends AbstractMap<String, Object> {
     }
 
     private Object bean;
+    private HashMap<Class<?>, HashMap<String, Method>> getterCache;
 
-    private HashMap<String, Method> getters = new HashMap<>();
+    private HashMap<String, Method> getters;
 
     private Set<Entry<String, Object>> entrySet = new AbstractSet<Entry<String, Object>>() {
         @Override
@@ -145,47 +173,61 @@ public class BeanAdapter extends AbstractMap<String, Object> {
      * The source Bean.
      */
     public BeanAdapter(Object bean) {
+        this(bean, new HashMap<Class<?>, HashMap<String, Method>>());
+    }
+
+    private BeanAdapter(Object bean, HashMap<Class<?>, HashMap<String, Method>> getterCache) {
         if (bean == null) {
             throw new IllegalArgumentException();
         }
 
         this.bean = bean;
+        this.getterCache = getterCache;
 
         Class<?> type = bean.getClass();
-        Method[] methods = type.getMethods();
 
-        for (int i = 0; i < methods.length; i++) {
-            Method method = methods[i];
+        getters = getterCache.get(type);
 
-            if (type.isAssignableFrom(method.getDeclaringClass())) {
-                String methodName = method.getName();
+        if (getters == null) {
+            getters = new HashMap<>();
 
-                String prefix;
-                if (methodName.startsWith(GET_PREFIX)) {
-                    prefix = GET_PREFIX;
-                } else if (methodName.startsWith(IS_PREFIX)) {
-                    prefix = IS_PREFIX;
-                } else {
-                    prefix = null;
-                }
+            Method[] methods = type.getMethods();
 
-                if (prefix != null)  {
-                    int j = prefix.length();
-                    int n = methodName.length();
+            for (int i = 0; i < methods.length; i++) {
+                Method method = methods[i];
 
-                    if (j < n && method.getParameterCount() == 0) {
-                        char c = methodName.charAt(j++);
+                if (type.isAssignableFrom(method.getDeclaringClass())) {
+                    String methodName = method.getName();
 
-                        if (j == n || Character.isLowerCase(methodName.charAt(j))) {
-                            c = Character.toLowerCase(c);
+                    String prefix;
+                    if (methodName.startsWith(GET_PREFIX)) {
+                        prefix = GET_PREFIX;
+                    } else if (methodName.startsWith(IS_PREFIX)) {
+                        prefix = IS_PREFIX;
+                    } else {
+                        prefix = null;
+                    }
+
+                    if (prefix != null)  {
+                        int j = prefix.length();
+                        int n = methodName.length();
+
+                        if (j < n && method.getParameterCount() == 0) {
+                            char c = methodName.charAt(j++);
+
+                            if (j == n || Character.isLowerCase(methodName.charAt(j))) {
+                                c = Character.toLowerCase(c);
+                            }
+
+                            String key = c + methodName.substring(j);
+
+                            getters.put(key, method);
                         }
-
-                        String key = c + methodName.substring(j);
-
-                        getters.put(key, method);
                     }
                 }
             }
+
+            getterCache.put(type, getters);
         }
     }
 
@@ -200,7 +242,7 @@ public class BeanAdapter extends AbstractMap<String, Object> {
         Object value;
         if (method != null) {
             try {
-                value = adapt(method.invoke(bean));
+                value = adapt(method.invoke(bean), getterCache);
             } catch (InvocationTargetException | IllegalAccessException exception) {
                 throw new RuntimeException(exception);
             }
@@ -223,13 +265,14 @@ public class BeanAdapter extends AbstractMap<String, Object> {
      * <li>{@link String}</li>
      * <li>{@link Number}</li>
      * <li>{@link Boolean}</li>
+     * <li>{@link Enum}</li>
+     * <li>{@link Date}</li>
+     * <li>{@link TemporalAccessor}</li>
      * </ul>
-     * If the value is a {@link Date}, it is converted to its numeric
-     * representation via {@link Date#getTime()}. If the value is a
-     * {@link List}, it is wrapped in an adapter that will adapt the list's
-     * elements. If the value is a {@link Map}, it is wrapped in an adapter
-     * that will adapt the map's values. Otherwise, the value is considered a
-     * nested Bean and is wrapped in a Bean adapter.
+     * If the value is a {@link List}, it is wrapped in an adapter that will
+     * adapt the list's elements. If the value is a {@link Map}, it is wrapped
+     * in an adapter that will adapt the map's values. Otherwise, the value is
+     * considered a nested Bean and is wrapped in a Bean adapter.
      *
      * @param <T> The expected type of the adapted value.
      *
@@ -239,17 +282,25 @@ public class BeanAdapter extends AbstractMap<String, Object> {
      * @return
      * The adapted value.
      */
-    @SuppressWarnings("unchecked")
     public static <T> T adapt(Object value) {
-        if (value != null && !(value instanceof String || value instanceof Number || value instanceof Boolean)) {
-            if (value instanceof Date) {
-                value = ((Date)value).getTime();
-            } else if (value instanceof List<?>) {
-                value = new ListAdapter((List<Object>)value);
+        return adapt(value, new HashMap<Class<?>, HashMap<String, Method>>());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T adapt(Object value, HashMap<Class<?>, HashMap<String, Method>> getterCache) {
+        if (!(value == null
+            || value instanceof String
+            || value instanceof Number
+            || value instanceof Boolean
+            || value instanceof Enum<?>
+            || value instanceof Date
+            || value instanceof TemporalAccessor)) {
+            if (value instanceof List<?>) {
+                value = new ListAdapter((List<Object>)value, getterCache);
             } else if (value instanceof Map<?, ?>) {
-                value = new MapAdapter((Map<Object, Object>)value);
+                value = new MapAdapter((Map<Object, Object>)value, getterCache);
             } else {
-                value = new BeanAdapter(value);
+                value = new BeanAdapter(value, getterCache);
             }
         }
 
