@@ -55,9 +55,9 @@
   </build>
   <distributionManagement>  
    <repository>  
-     <id>nascent-plugins</id>  
-     <name>nascent-plugins</name>  
-     <url>http://192.168.1.88:9081/repository/NascentPackages</url>  
+     <id>nascent-cloud</id>  
+     <name>nascent-cloud</name>  
+     <url>http://192.168.1.88:9081/repository/Nascent-Cloud</url>  
    </repository>  
  </distributionManagement> 
 </project>
